@@ -1,8 +1,11 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
-    task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
-    timer::get_time_us,
+    task::{
+        exit_current_and_run_next, outer_get_first_run_time, outer_get_pcb,
+        suspend_current_and_run_next, TaskControlBlock, TaskStatus,
+    },
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -51,7 +54,18 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    -1
+    let p: *const TaskControlBlock = outer_get_pcb();
+    let time = outer_get_first_run_time();
+    unsafe {
+        (*ti).time = get_time_ms() - time as usize;
+    }
+    unsafe {
+        (*ti).syscall_times = (*p).syscall_count;
+    }
+    unsafe {
+        (*ti).status = TaskStatus::Running;
+    }
+    return 0;
 }
