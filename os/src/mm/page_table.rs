@@ -5,7 +5,7 @@ use core::ptr::copy_nonoverlapping;
 use super::{frame_alloc, FrameTracker, MapPermission, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use crate::config::PAGE_SIZE;
 use crate::syscall::process::{TaskInfo, TimeVal};
-use crate::task::{current_user_token, map_current_memory_set, outer_get_pcb, TaskStatus};
+use crate::task::{current_task, current_user_token, map_current_memory_set, TaskStatus};
 use crate::timer::*;
 use alloc::string::String;
 use alloc::vec;
@@ -226,7 +226,8 @@ pub fn write_time_val(token: usize, ptr: *mut TimeVal) {
 pub fn write_task_info(token: usize, ptr: *mut TaskInfo) {
     // Taskinfo offset : [4*500] 8 1
 
-    let pcb = outer_get_pcb();
+    let tcb = current_task().unwrap();
+    let pcb = tcb.inner_exclusive_access();
     unsafe {
         let temp = TaskInfo {
             status: TaskStatus::Running,

@@ -1,4 +1,6 @@
 //!Implementation of [`TaskManager`]
+use core::isize;
+
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
 use alloc::collections::VecDeque;
@@ -23,7 +25,20 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        let mut min = isize::MAX;
+        let mut idx = 0;
+        for (i, item) in self.ready_queue.iter().enumerate() {
+            let pcb = item.inner_exclusive_access();
+            let p = pcb.pass;
+            if p < min {
+                min = p;
+                idx = i;
+            }
+        }
+        let mut pcb = self.ready_queue[idx].inner_exclusive_access();
+        pcb.pass += 100000000 / pcb.priority;
+        drop(pcb);
+        self.ready_queue.remove(idx)
     }
 }
 

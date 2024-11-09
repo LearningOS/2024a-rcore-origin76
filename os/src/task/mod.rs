@@ -21,18 +21,12 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::{get_app_data, get_num_app};
-use crate::mm::VirtAddr;
-use crate::sync::UPSafeCell;
-use crate::timer::get_time_ms;
-use crate::mm::MapPermission;
-use crate::trap::TrapContext;
-use alloc::vec::Vec;
-use crate::loader::get_app_data_by_name;
+use crate::{loader::get_app_data_by_name, mm::MapPermission};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
+use crate::mm::VirtAddr;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
@@ -124,11 +118,26 @@ pub fn add_initproc() {
 }
 
 /// mmap
-pub fn map_current_memory_set(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
-    let mut inner = TASK_MANAGER.inner.exclusive_access();
-    let current = inner.current_task;
-    inner.tasks[current]
-        .memory_set
-        .insert_framed_area(start_va, end_va, permission);
+pub fn map_current_memory_set(
+    start_va: VirtAddr,
+    end_va: VirtAddr,
+    permission: MapPermission,
+) -> isize {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.insert_framed_area(start_va, end_va, permission);
     return 0;
+}
+
+/// count syscall
+pub fn outer_increase_syscall_num(syscall_id: usize) {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.syscall_count[syscall_id] += 1;
+}
+/// get first run time
+pub fn outer_get_first_run_time() -> i64 {
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    inner.start_time
 }

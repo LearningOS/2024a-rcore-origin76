@@ -2,15 +2,13 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM, mm::{mmap_impl, munmap_impl, write_task_info, write_time_val}, task::{
-        change_program_brk, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus
-    }
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
+    mm::{mmap_impl, munmap_impl, write_task_info, write_time_val},
     mm::{translated_refmut, translated_str},
+    task::{add_task, current_task},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
     },
 };
 
@@ -49,11 +47,13 @@ pub fn sys_yield() -> isize {
     0
 }
 
+/// get pid
 pub fn sys_getpid() -> isize {
     trace!("kernel: sys_getpid pid:{}", current_task().unwrap().pid.0);
     current_task().unwrap().pid.0 as isize
 }
 
+/// fork
 pub fn sys_fork() -> isize {
     trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
     let current_task = current_task().unwrap();
@@ -69,6 +69,7 @@ pub fn sys_fork() -> isize {
     new_pid as isize
 }
 
+/// exec
 pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
     let token = current_user_token();
@@ -142,7 +143,7 @@ pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
 
 /// YOUR JOB: Implement mmap.
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
-    if (port & (!0x7) != 0) || (port & 0x7 == 0){
+    if (port & (!0x7) != 0) || (port & 0x7 == 0) {
         return -1;
     }
     mmap_impl(start, len, port)
@@ -180,12 +181,13 @@ pub fn sys_spawn(path: *const u8) -> isize {
     }
 }
 
-
-// YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+/// Set task priority.
+pub fn sys_set_priority(prio: isize) -> isize {
+    if prio < 2 {
+        return -1;
+    }
+    let current_task = current_task().unwrap();
+    let mut inner = current_task.inner_exclusive_access();
+    inner.priority = prio;
+    prio
 }

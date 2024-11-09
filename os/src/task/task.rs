@@ -73,7 +73,13 @@ pub struct TaskControlBlockInner {
     pub start_time: i64,
 
     /// syscall count
-    pub syscall_count: [u32;MAX_SYSCALL_NUM],
+    pub syscall_count: [u32; MAX_SYSCALL_NUM],
+
+    /// prio
+    pub priority: isize,
+    
+    /// stride pass
+    pub pass: isize,
 }
 
 impl TaskControlBlockInner {
@@ -124,8 +130,10 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
-            start_time: -1,
-            syscall_count: [0;MAX_SYSCALL_NUM],
+                    priority: 16,
+                    pass: 0,
+                    start_time: -1,
+                    syscall_count: [0; MAX_SYSCALL_NUM],
                 })
             },
         };
@@ -199,6 +207,10 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    priority: 16,
+                    start_time: -1,
+                    pass: 0,
+                    syscall_count: [0; MAX_SYSCALL_NUM],
                 })
             },
         });
