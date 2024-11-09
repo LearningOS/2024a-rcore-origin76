@@ -71,6 +71,18 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// first start time
+    pub start_time: i64,
+
+    /// syscall count
+    pub syscall_count: [u32; MAX_SYSCALL_NUM],
+
+    /// prio
+    pub priority: isize,
+    
+    /// stride pass
+    pub pass: isize,
 }
 
 impl TaskControlBlockInner {
@@ -135,6 +147,10 @@ impl TaskControlBlock {
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    priority: 16,
+                    pass: 0,
+                    start_time: -1,
+                    syscall_count: [0; MAX_SYSCALL_NUM],
                 })
             },
         };
@@ -216,6 +232,10 @@ impl TaskControlBlock {
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    priority: 16,
+                    start_time: -1,
+                    pass: 0,
+                    syscall_count: [0; MAX_SYSCALL_NUM],
                 })
             },
         });

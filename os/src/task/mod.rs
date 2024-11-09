@@ -22,12 +22,14 @@ mod switch;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
+use crate::{loader::get_app_data_by_name, mm::MapPermission};
 use crate::fs::{open_file, OpenFlags};
 use alloc::sync::Arc;
 pub use context::TaskContext;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
+use crate::mm::VirtAddr;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
@@ -119,4 +121,29 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+
+/// mmap
+pub fn map_current_memory_set(
+    start_va: VirtAddr,
+    end_va: VirtAddr,
+    permission: MapPermission,
+) -> isize {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.insert_framed_area(start_va, end_va, permission);
+    return 0;
+}
+
+/// count syscall
+pub fn outer_increase_syscall_num(syscall_id: usize) {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.syscall_count[syscall_id] += 1;
+}
+/// get first run time
+pub fn outer_get_first_run_time() -> i64 {
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    inner.start_time
 }

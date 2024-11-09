@@ -1,4 +1,12 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use core::mem;
+use core::ptr::copy_nonoverlapping;
+
+use super::{frame_alloc, FrameTracker, MapPermission, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use crate::config::PAGE_SIZE;
+use crate::syscall::process::{TaskInfo, TimeVal};
+use crate::task::{current_task, current_user_token, map_current_memory_set, TaskStatus};
+use crate::timer::*;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
@@ -179,6 +187,128 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// write timeval in kernel
+pub fn write_time_val(token: usize, ptr: *mut TimeVal) {
+    let page_table = PageTable::from_token(token);
+
+    let sec_ptr = unsafe { &(*ptr).sec as *const usize };
+    let sec_va = VirtAddr::from(sec_ptr as usize);
+    let sec_vpn = sec_va.floor();
+
+    let sec_ppn = page_table.translate(sec_vpn).unwrap().ppn();
+    let sec_offset = sec_va.page_offset();
+    let sec_bytes = &mut sec_ppn.get_bytes_array()[sec_offset..sec_offset + 8];
+
+    let usec_ptr = unsafe { &(*ptr).usec as *const usize };
+    let usec_va = VirtAddr::from(usec_ptr as usize);
+    let usec_vpn = usec_va.floor();
+
+    let usec_ppn = page_table.translate(usec_vpn).unwrap().ppn();
+    let usec_offset = usec_va.page_offset();
+    let usec_bytes = &mut usec_ppn.get_bytes_array()[usec_offset..usec_offset + 8];
+
+    let time_us = get_time_us();
+    let us = time_us % 1_000_000;
+    let sec = time_us / 1_000_000;
+
+    unsafe {
+        let s_ptr = sec_bytes.as_mut_ptr() as *mut usize;
+        *s_ptr = sec;
+        let us_ptr = usec_bytes.as_mut_ptr() as *mut usize;
+        *us_ptr = us;
+    };
+}
+
+/// write task_info in kernel
+pub fn write_task_info(token: usize, ptr: *mut TaskInfo) {
+    // Taskinfo offset : [4*500] 8 1
+
+    let tcb = current_task().unwrap();
+    let pcb = tcb.inner_exclusive_access();
+    unsafe {
+        let temp = TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: (*pcb).syscall_count,
+            time: get_time_ms() - (*pcb).start_time as usize,
+        };
+        let info: *const TaskInfo = &temp as *const TaskInfo;
+        let p: *mut u8 = info as *mut u8;
+        let mut bytes = translated_byte_buffer(token, ptr as *const u8, mem::size_of::<TaskInfo>());
+        let mut cur = 0;
+        for byte in &mut bytes {
+            if cur + byte.len() <= mem::size_of::<TaskInfo>() {
+                copy_nonoverlapping(p.add(cur), (byte).as_mut_ptr(), byte.len());
+            }
+            cur += byte.len()
+        }
+    }
+}
+
+/// mmap
+pub fn mmap_impl(start: usize, len: usize, port: usize) -> isize {
+    let page_table = PageTable::from_token(current_user_token());
+    if VirtAddr::from(start).page_offset() != 0 {
+        return -1;
+    }
+    let flags = MapPermission::U
+        | if port & (1 << 0) != 0 {
+            MapPermission::R
+        } else {
+            MapPermission::empty()
+        }
+        | if port & (1 << 1) != 0 {
+            MapPermission::W
+        } else {
+            MapPermission::empty()
+        }
+        | if port & (1 << 2) != 0 {
+            MapPermission::X
+        } else {
+            MapPermission::empty()
+        };
+
+    let mut idx = 0;
+    while idx < len {
+        let pte = page_table.find_pte(VirtAddr::from(start + idx).floor());
+        if pte.is_some() && pte.unwrap().is_valid() {
+            return -1;
+        }
+        idx += PAGE_SIZE;
+    }
+    map_current_memory_set(VirtAddr::from(start) , VirtAddr::from(start+len), flags)
+}
+
+/// unmap
+pub fn munmap_impl(start: usize, len: usize) -> isize {
+    let mut page_table = PageTable::from_token(current_user_token());
+    if VirtAddr::from(start).page_offset() != 0 {
+        return -1;
+    }
+
+    let mut idx = 0;
+    while idx < len {
+        let pte = page_table.find_pte(VirtAddr::from(start + idx).floor());
+        println!(
+            "find {} {}",
+            VirtAddr::from(start + idx).floor().0,
+            pte.is_some()
+        );
+        if !pte.is_some() || !pte.unwrap().is_valid(){
+            return -1;
+        }
+        idx += PAGE_SIZE;
+    }
+
+    idx = 0;
+    while idx < len {
+        println!("unmap {}", VirtAddr::from(start + idx).floor().0);
+        page_table.unmap(VirtAddr::from(start + idx).floor());
+        idx += PAGE_SIZE;
+    }
+
+    return 0;
 }
 
 /// Translate&Copy a ptr[u8] array end with `\0` to a `String` Vec through page table
