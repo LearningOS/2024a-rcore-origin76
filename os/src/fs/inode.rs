@@ -4,10 +4,12 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
-use crate::drivers::BLOCK_DEVICE;
+
+
+use super::{File, Stat};
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
+use crate::drivers::BLOCK_DEVICE;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -51,6 +53,33 @@ impl OSInode {
             v.extend_from_slice(&buffer[..len]);
         }
         v
+    }
+
+    /// get stat outer
+    pub fn get_stat(&self) -> Stat {
+        let inner = self.inner.exclusive_access();
+        let inode = &inner.inode;
+        debug!("fstat {} {}" , inode.block_id , inode.block_offset);
+        let (ino, is_dir) = inode.get_file_stat();
+        let mut copy_struct = Stat {
+            dev: 0,
+            ino: ino,
+            mode: super::StatMode { bits: 0 },
+            nlink: 0,
+            pad: [0; 7],
+        };
+        copy_struct.mode = if is_dir {
+            super::StatMode::DIR
+        } else {
+            super::StatMode::FILE
+        };
+        copy_struct
+    }
+
+    pub fn get_nlink(&self) -> Option<u8> {
+        let inner = self.inner.exclusive_access();
+        let inode = &inner.inode;
+        get_nlink_id_offset(inode.block_id, inode.block_offset)
     }
 }
 
@@ -124,6 +153,21 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// link file impl
+pub fn link_file(old_name: &str, new_name: &str) {
+    ROOT_INODE.create_hard_link(old_name, new_name);
+}
+
+/// unlink file impl
+pub fn unlink_file(name: &str) -> isize {
+    ROOT_INODE.delete(name);
+    0
+}
+
+pub fn get_nlink_id_offset(id : usize , offset: usize) -> Option<u8>{
+    ROOT_INODE.find_block_id(id as u32, offset)
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -154,5 +198,9 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+
+    fn as_osinode(&self) -> Option<&OSInode> {
+        Some(self)
     }
 }

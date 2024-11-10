@@ -2,6 +2,7 @@ use super::{BlockDevice, BLOCK_SZ};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use lazy_static::*;
+use log::debug;
 use spin::Mutex;
 /// Cached block inside memory
 pub struct BlockCache {

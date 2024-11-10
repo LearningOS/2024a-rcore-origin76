@@ -7,7 +7,6 @@ use crate::config::PAGE_SIZE;
 use crate::syscall::process::{TaskInfo, TimeVal};
 use crate::task::{current_task, current_user_token, map_current_memory_set, TaskStatus};
 use crate::timer::*;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
