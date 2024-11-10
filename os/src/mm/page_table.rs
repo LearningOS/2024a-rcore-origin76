@@ -1,4 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use crate::syscall::process::TimeVal;
+use crate::timer::get_time_us;
+
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
@@ -215,6 +218,38 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap()
         .get_mut()
+}
+
+/// write timeval in kernel
+pub fn write_time_val(token: usize, ptr: *mut TimeVal) {
+    let page_table = PageTable::from_token(token);
+
+    let sec_ptr = unsafe { &(*ptr).sec as *const usize };
+    let sec_va = VirtAddr::from(sec_ptr as usize);
+    let sec_vpn = sec_va.floor();
+
+    let sec_ppn = page_table.translate(sec_vpn).unwrap().ppn();
+    let sec_offset = sec_va.page_offset();
+    let sec_bytes = &mut sec_ppn.get_bytes_array()[sec_offset..sec_offset + 8];
+
+    let usec_ptr = unsafe { &(*ptr).usec as *const usize };
+    let usec_va = VirtAddr::from(usec_ptr as usize);
+    let usec_vpn = usec_va.floor();
+
+    let usec_ppn = page_table.translate(usec_vpn).unwrap().ppn();
+    let usec_offset = usec_va.page_offset();
+    let usec_bytes = &mut usec_ppn.get_bytes_array()[usec_offset..usec_offset + 8];
+
+    let time_us = get_time_us();
+    let us = time_us % 1_000_000;
+    let sec = time_us / 1_000_000;
+
+    unsafe {
+        let s_ptr = sec_bytes.as_mut_ptr() as *mut usize;
+        *s_ptr = sec;
+        let us_ptr = usec_bytes.as_mut_ptr() as *mut usize;
+        *us_ptr = us;
+    };
 }
 
 /// An abstraction over a buffer passed from user space to kernel space

@@ -102,7 +102,8 @@ pub const SYSCALL_CONDVAR_SIGNAL: usize = 472;
 pub const SYSCALL_CONDVAR_WAIT: usize = 473;
 
 mod fs;
-mod process;
+/// process
+pub mod process;
 mod sync;
 mod thread;
 
