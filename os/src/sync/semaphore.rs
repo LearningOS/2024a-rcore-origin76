@@ -43,9 +43,10 @@ impl Semaphore {
                     .iter()
                     .position(|&x| x.0 == sem_id)
                 {
-                    Some(index) => task_inner.sem_allocation[index].1 -= 1,
-                    None => {},
+                    Some(index) => task_inner.sem_allocation[index].1 += 1,
+                    None => task_inner.sem_allocation.push((sem_id, 1)),
                 }
+                task_inner.sem_need = usize::MAX;
                 drop(task_inner);
                 wakeup_task(task);
             }
